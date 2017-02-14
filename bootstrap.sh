@@ -5,7 +5,7 @@ set -x
 sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 0C49F3730359A14518585931BC711F9BA15703C6
 echo "deb [ arch=amd64 ] http://repo.mongodb.org/apt/ubuntu trusty/mongodb-org/3.4 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-3.4.list
 sudo apt-get update
-sudo apt-get install -y git
+sudo apt-get install -y git mongodb-org
 
 # Download DevStack
 git clone https://git.openstack.org/openstack-dev/devstack /devstack --single-branch
@@ -37,11 +37,14 @@ SERVICE_PASSWORD=admin
 GIT_DEPTH=1
 disable_service tempest swift
 
+
 # Set ceilometer with gnocchi
 # enable_plugin gnocchi https://github.com/openstack/gnocchi master
-enable_plugin ceilometer https://git.openstack.org/openstack/ceilometer.git
-CEILOMETER_BACKEND=mongodb
 # CEILOMETER_BACKEND=gnocchi
+enable_plugin ceilometer https://git.openstack.org/openstack/ceilometer.git master
+enable_plugin osprofiler https://git.openstack.org/openstack/osprofiler.git master
+CEILOMETER_BACKEND=mongodb
+OSPROFILER_HMAC_KEYS=SECRET_KEY
 
 [[post-config|\$KEYSTONE_CONF]]
 [profiler]
@@ -70,7 +73,6 @@ enabled = True
 trace_sqlalchemy = True
 hmac_keys = SECRET_KEY
 connection_string = messaging://
-EOF
 
 [[post-config|\$CEILOMETER_CONF]]
 [DEFAULT]
@@ -79,7 +81,12 @@ event_dispatchers = database
 # meter_dispatchers = gnocchi
 
 [oslo_messaging_notifications]
-topics = notification, profiler
+topics = notifications, profiler
+
+[event]
+store_raw = info
+
+EOF
 
 # Run DevStack
 sudo -H -u stack ./unstack.sh
