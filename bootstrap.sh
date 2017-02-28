@@ -1,50 +1,46 @@
 #!/usr/bin/env bash
 set -x
 
-# # Install MongoDB/git
-sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 0C49F3730359A14518585931BC711F9BA15703C6
-echo "deb [ arch=amd64 ] http://repo.mongodb.org/apt/ubuntu trusty/mongodb-org/3.4 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-3.4.list
-sudo apt-get update
-sudo apt-get install -y git mongodb-org
+
+# 1. Download Devstack
+apt update -y; apt install -y git sudo
+git clone --depth=1 --branch=stable/ocata\
+    https://git.openstack.org/openstack-dev/devstack\
+    /devstack
 
-# Download DevStack
-git clone https://git.openstack.org/openstack-dev/devstack /devstack --single-branch
-
+
+# 2. Patch Devstack
 # Clone only the required branch to save time
 # see https://bugs.launchpad.net/devstack/+bug/1412244
 sed -i 's/git_timed clone $git_clone_flags $git_remote $git_dest$/& -b $git_ref/' /devstack/functions-common
-
-# Create stack user and group and give her access to 'devstack
 sed -i 's/HOST_IP=${HOST_IP:-}/ HOST_IP=10.0.2.15/' /devstack/stackrc
+
+
+# 3. Create `stack` user & group
 /devstack/tools/create-stack-user.sh
+# Give her access to `/devstack` directory and add it to sudoers
 chown -R stack:stack /devstack
 echo "vagrant ALL=(stack) NOPASSWD:ALL" >> /etc/sudoers
 
-# # get the requested files in the proper place ( from http://docs.openstack.org/releasenotes/horizon/unreleased.html#id2 )
-# sudo wget https://raw.githubusercontent.com/openstack/horizon/master/openstack_dashboard/local/local_settings.d/_9030_profiler_settings.py.example -O /opt/stack/horizon/openstack_dashboard/local/local_settings.d/_9030_profiler_settings.py
-# sudo wget https://raw.githubusercontent.com/openstack/horizon/master/openstack_dashboard/contrib/developer/enabled/_9030_profiler.py -O /opt/stack/horizon/openstack_dashboard/local/enabled/_9030_profiler.py
-
-cd /devstack
-
-# Make local configuration file required by DevStack
-cat > local.conf <<- EOF
+
+# 4. Make the configuration file required by DevStack
+cat > /devstack/local.conf <<- EOF
 [[local|localrc]]
-HOST_IP=10.0.2.15
 ADMIN_PASSWORD=admin
 DATABASE_PASSWORD=admin
 RABBIT_PASSWORD=admin
 SERVICE_PASSWORD=admin
 GIT_DEPTH=1
-disable_service tempest swift
 
+# http://docs.openstack.org/developer/ceilometer/install/development.html#configuring-devstack
+# Enable the Ceilometer devstack plugin
+enable_plugin panko https://git.openstack.org/openstack/panko stable/ocata
+enable_plugin ceilometer https://git.openstack.org/openstack/ceilometer stable/ocata
+enable_plugin osprofiler https://git.openstack.org/openstack/osprofiler stable/ocata
 
-# Set ceilometer with gnocchi
-# enable_plugin gnocchi https://github.com/openstack/gnocchi master
-# CEILOMETER_BACKEND=gnocchi
-enable_plugin ceilometer https://git.openstack.org/openstack/ceilometer.git master
-enable_plugin osprofiler https://git.openstack.org/openstack/osprofiler.git master
-CEILOMETER_BACKEND=mongodb
 OSPROFILER_HMAC_KEYS=SECRET_KEY
+
+disable_service tempest swift
 
 [[post-config|\$KEYSTONE_CONF]]
 [profiler]
@@ -73,21 +69,10 @@ enabled = True
 trace_sqlalchemy = True
 hmac_keys = SECRET_KEY
 connection_string = messaging://
-
-[[post-config|\$CEILOMETER_CONF]]
-[DEFAULT]
-event_dispatchers = database
-# meter_dispatchers = database
-# meter_dispatchers = gnocchi
-
-[oslo_messaging_notifications]
-topics = notifications, profiler
-
-[event]
-store_raw = info
-
 EOF
 
+
+# 5. Run Devstack as stack user
 # Run DevStack
-sudo -H -u stack ./unstack.sh
-sudo -H -u stack ./stack.sh
+sudo -H -u stack /devstack/unstack.sh
+sudo -H -u stack /devstack/stack.sh
