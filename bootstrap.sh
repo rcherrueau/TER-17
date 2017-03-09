@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -x
 
+# Arguments of this bash are:
+# $1: Virtualization driver for nova compute, e,g,: libvirt, fake,
+#     LXC, OpenVZ ...
+#     see https://github.com/openstack-dev/devstack/blob/485b8f13751548b200111cd8a40bc971d27a90af/stackrc#L571
+# $2: Number of fake compute in case of fake virt driver
+VIRT_DRIVER=${1:-"libvirt"}
+NUMBER_FAKE_NOVA_COMPUTE=${2:-"1"}
+
 
 # 1. Download Devstack
 apt update -y; apt install -y git sudo
@@ -32,8 +40,11 @@ RABBIT_PASSWORD=admin
 SERVICE_PASSWORD=admin
 GIT_DEPTH=1
 
-# http://docs.openstack.org/developer/ceilometer/install/development.html#configuring-devstack
-# Enable the Ceilometer devstack plugin
+# Nova Compute driver configuration
+VIRT_DRIVER=${VIRT_DRIVER}
+NUMBER_FAKE_NOVA_COMPUTE=${NUMBER_FAKE_NOVA_COMPUTE}
+
+# Enable osprofiler
 enable_plugin panko https://git.openstack.org/openstack/panko stable/ocata
 enable_plugin ceilometer https://git.openstack.org/openstack/ceilometer stable/ocata
 enable_plugin osprofiler https://git.openstack.org/openstack/osprofiler stable/ocata
@@ -42,13 +53,20 @@ OSPROFILER_HMAC_KEYS=SECRET_KEY
 
 disable_service tempest swift
 
+# -----
 [[post-config|\$KEYSTONE_CONF]]
+[cache]
+# Disable Keystone cache to remove keystone non-determinisme and make
+# comparison of two traces easier.
+enabled = False
+
 [profiler]
 enabled = True
 trace_sqlalchemy = True
 hmac_keys = SECRET_KEY
 connection_string = messaging://
 
+# -----
 [[post-config|\$GLANCE_API_CONF]]
 [profiler]
 enabled = True
@@ -56,6 +74,7 @@ trace_sqlalchemy = True
 hmac_keys = SECRET_KEY
 connection_string = messaging://
 
+# -----
 [[post-config|\$NEUTRON_CONF]]
 [profiler]
 enabled = True
@@ -63,6 +82,7 @@ trace_sqlalchemy = True
 hmac_keys = SECRET_KEY
 connection_string = messaging://
 
+# -----
 [[post-config|\$CINDER_CONF]]
 [profiler]
 enabled = True
