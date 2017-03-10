@@ -35,15 +35,16 @@ function mkTrace () {
   echo "${TRACE_ID}"
 }
 
-# saveTrace: trace_id → output_file → ( )
+# saveTrace: trace_id → [trace_type] → output_file → ( )
 # Gets a Trace and saves it.
 #
 # with:
-# - $1: trace_id    Trace id to save
-# - $2: output_file Output file location without extension
+# - $1: trace_id     Trace id to save
+# - $2: [trace_type] A list of trace type (eg, "json html")
+# - $3: output_file  Output file location without extension
 function saveTrace () {
-  for type in ${TRACE_TYPES} ; do
-    osprofiler trace show --${type} --out "$2.${type}" "$1"
+  for type in $2 ; do
+    osprofiler trace show --${type} --out "$3.${type}" "$1"
   done
 }
 
@@ -56,8 +57,8 @@ function saveTrace () {
 set -x
 
 # Scenarios
-saveTrace $(mkTrace 'hypervisor list') "/vagrant_data/hypervisor-list-${TRACE_NAME}"
-saveTrace $(mkTrace 'image list') "/vagrant_data/image-list-${TRACE_NAME}"
-saveTrace $(mkTrace 'flavor list') "/vagrant_data/flavor-list-${TRACE_NAME}"
+saveTrace $(mkTrace 'hypervisor list') ${TRACE_TYPES} "/vagrant_data/hypervisor-list-${TRACE_NAME}"
+saveTrace $(mkTrace 'image list') ${TRACE_TYPES} "/vagrant_data/image-list-${TRACE_NAME}"
+saveTrace $(mkTrace 'flavor list') ${TRACE_TYPES} "/vagrant_data/flavor-list-${TRACE_NAME}"
 saveTrace $(mkTrace 'server create --flavor=m1.tiny --image=cirros-0.3.4-x86_64-uec test')\
-          "/vagrant_data/server-create-${TRACE_NAME}"
+          ${TRACE_TYPES} "/vagrant_data/server-create-${TRACE_NAME}"
